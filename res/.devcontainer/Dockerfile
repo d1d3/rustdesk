@@ -30,7 +30,7 @@ RUN $HOME/.cargo/bin/cargo install cargo-ndk
 RUN wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.10.1-stable.tar.xz
 RUN tar xf flutter_linux_3.10.1-stable.tar.xz && rm flutter_linux_3.10.1-stable.tar.xz
 ENV PATH="$PATH:$HOME/flutter/bin"
-RUN dart pub global activate ffigen 5.0.1
+RUN dart pub global activate ffigen 8.0.0
 
 
 # Install packages

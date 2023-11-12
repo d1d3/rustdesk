@@ -46,7 +46,7 @@ class ConnectStatus: Reactor.Component {
             return translate('connecting_status');
         }
         if (!handler.using_public_server()) return translate('Ready');
-        return <span>{translate("Ready")}, <span .link #setup-server>{translate("setup_server_tip")}</span></span>;
+        return <span>{translate("Ready")}</span>;
     }
 
     event click $(#start-service) () {
@@ -313,11 +313,7 @@ class MyIdMenu: Reactor.Component {
                 <DirectServer />
                 {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
-                {username ? 
-                <li #logout>{translate('Logout')} ({username})</li> :
-                <li #login>{translate('Login')}</li>}
-                {handler.is_ok_change_id() && key_confirmed && connect_status > 0 ? <li #change-id>{translate('Change ID')}</li> : ""}
-                <div .separator />
+                
                 <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
                 <Languages />
                 <li #about>{translate('About')} {" "}{handler.get_app_name()}</li>
@@ -359,18 +355,19 @@ class MyIdMenu: Reactor.Component {
             }
         }
     }
-
+    
     function showAbout() {
         var name = handler.get_app_name();
         msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
             <div>Fingerprint: " + handler.get_fingerprint() + " \
-            <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
-            <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
-	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2023 Purslane Ltd.\
+            <div .link .custom-event url='https://productivv.cz'>" + translate("Website") + "</div> \
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em; text-align: center; justify-content: center;'>Copyright &copy; 2023 Productivv.\
             <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
-            </div>\
+        </div>\
+        <div style='margin-top: 1em; text-align: center; justify-content: center;'>" + translate("Original") + "<span  .link .custom-event url='https://rustdesk.com'>RustDesk</span> </div>
+        
         </div>", "", function(el) {
             if (el && el.attributes) {
                 handler.open_url(el.attributes['url']);
@@ -596,19 +593,7 @@ class App: Reactor.Component
     }
 }
 
-class InstallMe: Reactor.Component {
-    function render() {
-        return <div .install-me>
-            <span />
-            <div>{translate('install_tip')}</div>
-            <div><button #install-me .button>{translate('Install')}</button></div>
-        </div>;
-    }
 
-    event click $(#install-me) {
-        handler.goto_install();
-    }
-}
 
 function download(from, to, args..) {
     var rqp = { type:#get, url: from, toFile: to };
@@ -662,7 +647,7 @@ class UpdateMe: Reactor.Component {
         handler.open_url("https://rustdesk.com/download");
         return;
         if (!is_win) {
-            handler.open_url("https://rustdesk.com");
+            handler.open_url("https://productivv.cz");
             return;
         }
         var url = software_update_url + '.' + handler.get_software_ext();
@@ -1181,117 +1166,6 @@ function set_local_user_info(user) {
         user_info.status = user.status;
     }
     handler.set_local_option("user_info", JSON.stringify(user_info));
-}
-
-function login() {
-    var name0 = getUserName();
-    var pass0 = '';
-    msgbox("custom-login", translate('Login'), <div .form .set-password> 
-            <div><span>{translate('Username')}:</span><input|text name="username" value={name0} .outline-focus /></div> 
-            <div><span>{translate('Password')}:</span><PasswordComponent value={pass0} /></div> 
-        </div>, "", function(res=null, show_progress) {
-        if (!res) return;
-        show_progress();
-        var name = (res.username || '').trim();
-        if (!name) {
-            show_progress(false, translate("Username missed"));
-            return " ";
-        }
-        var pass = (res.password || '').trim();
-        if (!pass) {
-            show_progress(false, translate("Password missed"));
-            return " ";
-        }
-        abLoading = true;
-        var url = handler.get_api_server();
-        httpRequest(url + "/api/login", #post, {username: name, password: pass, id: my_id, uuid: handler.get_uuid(), type: 'account', deviceInfo: getDeviceInfo()}, function(data) {
-            if (data.error) {
-                abLoading = false;
-                var err = translate(data.error);
-                show_progress(false, err);
-                return;
-            }
-            if (data.type == 'email_check') {
-                abLoading = false;
-                show_progress(-1);
-                on_email_check(data);
-                return;
-            }
-            handler.set_local_option("access_token", data.access_token);
-            set_local_user_info(data.user);
-            show_progress(-1);
-            myIdMenu.update();
-            getAb();
-        }, function(err, status) {
-            abLoading = false;
-            err = translate(err);
-            if (url.indexOf('rustdesk') < 0) err = url + ', ' + err;
-            show_progress(false, err);
-        });
-        return " ";
-      });
-}
-
-function on_email_check(last_msg) {
-    var emailHint = last_msg.user.email;
-    msgbox("custom-email-verification-code", translate('Verification code'), <div .form .set-password> 
-            <div><span>{translate('Email')}:</span><span>{emailHint}</span></div> 
-            <div><span>{translate('Verification code')}:</span><input|text name="verification_code" .outline-focus /></div> 
-            <div style="font-size:0.9em; margin-bottom:1em;">{translate('verification_tip')}</div>
-        </div>, "", 
-        function(res=null, show_progress) {
-            if (!res) return;
-            show_progress();
-            var code = (res.verification_code || '').trim();
-            if (!code || code.length < 6) {
-                show_progress(false, translate("Too short, at least 6 characters."));
-                return " ";
-            }
-            abLoading = true;
-            var url = handler.get_api_server();
-            httpRequest(url + "/api/login", #post, {username: last_msg.user.name, id: my_id, uuid: handler.get_uuid(), type: 'email_code', autoLogin: true, verificationCode: code, deviceInfo: getDeviceInfo()}, 
-                function(data) {
-                    if (data.error) {
-                        abLoading = false;
-                        show_progress(false, data.error);
-                        return;
-                    }
-                    handler.set_local_option("access_token", data.access_token);
-                    set_local_user_info(data.user);
-                    show_progress(-1);
-                    myIdMenu.update();
-                    getAb();
-                },
-                function(err, status) {
-                    abLoading = false;
-                    err = translate(err);
-                    if (url.indexOf('rustdesk') < 0) err = url + ', ' + err;
-                    show_progress(false, err);
-                }
-            );
-            return " ";
-        }
-    );
-}
-
-function reset_token() {
-    handler.set_local_option("access_token", "");
-    handler.set_local_option("user_info", "");
-    handler.set_local_option("selected-tags", "");
-    myIdMenu.update();
-    resetAb();
-    if (abComponent) {
-        abComponent.update();
-    }
-}
-
-function logout() {
-    var url = handler.get_api_server();
-    httpRequest(url + "/api/logout", #post, {id: my_id, uuid: handler.get_uuid()}, function(data) {
-    }, function(err, status) {
-        msgbox("custom-error", translate('Error'), err);
-    }, getHttpHeaders());
-    reset_token();
 }
 
 function refreshCurrentUser() {

@@ -261,6 +261,7 @@ class FileController {
       required this.getOtherSideDirectoryData});
 
   String get homePath => options.value.home;
+  void set homePath(String path) => options.value.home = path;
   OverlayDialogManager? get dialogManager => rootState.target?.dialogManager;
 
   String get shortPath {
@@ -376,6 +377,11 @@ class FileController {
   }
 
   void goToHomeDirectory() {
+    if (isLocal) {
+      openDirectory(homePath);
+      return;
+    }
+    homePath = "";
     openDirectory(homePath);
   }
 
@@ -1029,6 +1035,7 @@ class JobProgress {
   var to = "";
   var showHidden = false;
   var err = "";
+  int lastTransferredSize = 0;
 
   clear() {
     state = JobState.none;

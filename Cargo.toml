@@ -62,7 +62,7 @@ num_cpus = "1.15"
 bytes = { version = "1.4", features = ["serde"] }
 default-net = "0.14"
 wol-rs = "1.0"
-flutter_rust_bridge = { version = "1.75", features = ["uuid"], optional = true}
+flutter_rust_bridge = { version = "1.70.0", features = ["uuid"], optional = true}
 errno = "0.3"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.3", features = ["serde"] }
@@ -140,7 +140,7 @@ exclude = ["vdi/host", "examples/custom_plugin"]
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2023 Purslane, Inc."
 # this FileDescription overrides package.description
-FileDescription = "RustDesk"
+FileDescription = "ProVision"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -149,14 +149,14 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 [build-dependencies]
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
-flutter_rust_bridge_codegen = "1.75"
+flutter_rust_bridge_codegen = "1.70.0"
 os-version = "0.2"
 
 [dev-dependencies]
 hound = "3.5"
 
 [package.metadata.bundle]
-name = "RustDesk"
+name = "ProVision"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"

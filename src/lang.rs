@@ -1,28 +1,21 @@
 use std::ops::Deref;
-
+/* 
 mod ca;
 mod cn;
-mod cs;
 mod da;
-mod de;
 mod el;
-mod en;
 mod eo;
 mod es;
 mod fa;
 mod fr;
-mod hu;
 mod id;
 mod it;
 mod ja;
 mod ko;
 mod kz;
 mod nl;
-mod pl;
 mod ptbr;
 mod ro;
-mod ru;
-mod sk;
 mod sl;
 mod sq;
 mod sr;
@@ -33,9 +26,18 @@ mod tw;
 mod ua;
 mod vn;
 mod lt;
+mod de;
+mod hu;
+mod pl;
+*/
+mod cs;
+mod sk;
+mod en;
+
+
 
 pub const LANGS: &[(&str, &str)] = &[
-    ("en", "English"),
+    /*
     ("it", "Italiano"),
     ("fr", "Français"),
     ("de", "Deutsch"),
@@ -46,9 +48,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("es", "Español"),
     ("hu", "Magyar"),
     ("ru", "Русский"),
-    ("sk", "Slovenčina"),
     ("id", "Indonesia"),
-    ("cs", "Čeština"),
     ("da", "Dansk"),
     ("eo", "Esperanto"),
     ("tr", "Türkçe"),
@@ -68,6 +68,10 @@ pub const LANGS: &[(&str, &str)] = &[
     ("sl", "Slovenščina"),
     ("ro", "Română"),
     ("lt", "Lietuvių"),
+    */
+    ("sk", "Slovenčina"),
+    ("cs", "Čeština"),
+    ("en", "English"),
 ];
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -99,25 +103,21 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     }
     let lang = lang.to_lowercase();
     let m = match lang.as_str() {
+        /* 
         "fr" => fr::T.deref(),
         "zh-cn" => cn::T.deref(),
         "it" => it::T.deref(),
         "zh-tw" => tw::T.deref(),
-        "de" => de::T.deref(),
         "nl" => nl::T.deref(),
         "es" => es::T.deref(),
-        "hu" => hu::T.deref(),
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "id" => id::T.deref(),
         "br" => ptbr::T.deref(),
         "pt" => ptbr::T.deref(),
         "tr" => tr::T.deref(),
-        "cs" => cs::T.deref(),
         "da" => da::T.deref(),
-        "sk" => sk::T.deref(),
         "vn" => vn::T.deref(),
-        "pl" => pl::T.deref(),
         "ja" => ja::T.deref(),
         "ko" => ko::T.deref(),
         "kz" => kz::T.deref(),
@@ -132,12 +132,21 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "sl" => sl::T.deref(),
         "ro" => ro::T.deref(),
         "lt" => lt::T.deref(),
-        _ => en::T.deref(),
+        "hu" => hu::T.deref(),
+        "pl" => pl::T.deref(),
+        "de" => de::T.deref(),
+        */
+        
+       
+        "sk" => sk::T.deref(),
+        "en" => en::T.deref(),
+        
+        _ => cs::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
         if v.is_empty() {
-            if lang != "en" {
-                if let Some(v) = en::T.get(&name as &str) {
+            if lang != "cs" {
+                if let Some(v) = cs::T.get(&name as &str) {
                     return v.to_string();
                 }
             }

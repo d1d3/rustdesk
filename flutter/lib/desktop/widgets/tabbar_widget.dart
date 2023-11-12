@@ -8,8 +8,8 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -77,7 +77,7 @@ CancelFunc showRightMenu(ToastBuilder builder,
     targetContext: context,
     verticalOffset: 0,
     horizontalOffset: 0,
-    duration: Duration(seconds: 4),
+    duration: Duration(seconds: 300),
     animationDuration: Duration(milliseconds: 0),
     animationReverseDuration: Duration(milliseconds: 0),
     preferDirection: PreferDirection.rightTop,
@@ -177,6 +177,19 @@ class DesktopTabController {
       jumpTo(state.value.tabs.indexWhere((tab) => tab.key == key),
           callOnSelected: callOnSelected);
 
+  bool jumpToByKeyAndDisplay(String key, int display) {
+    for (int i = 0; i < state.value.tabs.length; i++) {
+      final tab = state.value.tabs[i];
+      if (tab.key == key) {
+        final ffi = (tab.page as RemotePage).ffi;
+        if (ffi.ffiModel.pi.currentDisplay == display) {
+          return jumpTo(i, callOnSelected: true);
+        }
+      }
+    }
+    return false;
+  }
+
   void closeBy(String? key) {
     if (!isDesktop) return;
     assert(onRemoved != null);
@@ -267,13 +280,9 @@ class DesktopTab extends StatelessWidget {
         tabType == DesktopTabType.install;
   }
 
-  static RxString labelGetterAlias(String peerId) {
-    final opt = 'alias';
-    PeerStringOption.init(peerId, opt, () {
-      final alias = bind.mainGetPeerOptionSync(id: peerId, key: opt);
-      return alias.isEmpty ? peerId : alias;
-    });
-    return PeerStringOption.find(peerId, opt);
+  static RxString tablabelGetter(String peerId) {
+    final alias = bind.mainGetPeerOptionSync(id: peerId, key: 'alias');
+    return RxString(getDesktopTabLabel(peerId, alias));
   }
 
   @override
@@ -439,8 +448,8 @@ class DesktopTab extends StatelessWidget {
           isMainWindow: isMainWindow,
           tabType: tabType,
           state: state,
+          tabController: controller,
           tail: tail,
-          isMaximized: stateGlobal.isMaximized,
           showMinimize: showMinimize,
           showMaximize: showMaximize,
           showClose: showClose,
@@ -455,7 +464,7 @@ class WindowActionPanel extends StatefulWidget {
   final bool isMainWindow;
   final DesktopTabType tabType;
   final Rx<DesktopTabState> state;
-  final RxBool isMaximized;
+  final DesktopTabController tabController;
 
   final bool showMinimize;
   final bool showMaximize;
@@ -468,7 +477,7 @@ class WindowActionPanel extends StatefulWidget {
       required this.isMainWindow,
       required this.tabType,
       required this.state,
-      required this.isMaximized,
+      required this.tabController,
       this.tail,
       this.showMinimize = true,
       this.showMaximize = true,
@@ -485,6 +494,8 @@ class WindowActionPanel extends StatefulWidget {
 class WindowActionPanelState extends State<WindowActionPanel>
     with MultiWindowListener, WindowListener {
   final _saveFrameDebounce = Debouncer(delay: Duration(seconds: 1));
+  Timer? _macOSCheckRestoreTimer;
+  int _macOSCheckRestoreCounter = 0;
 
   @override
   void initState() {
@@ -495,18 +506,18 @@ class WindowActionPanelState extends State<WindowActionPanel>
     Future.delayed(Duration(milliseconds: 500), () {
       if (widget.isMainWindow) {
         windowManager.isMaximized().then((maximized) {
-          if (widget.isMaximized.value != maximized) {
+          if (stateGlobal.isMaximized.value != maximized) {
             WidgetsBinding.instance.addPostFrameCallback(
-                (_) => setState(() => widget.isMaximized.value = maximized));
+                (_) => setState(() => stateGlobal.setMaximized(maximized)));
           }
         });
       } else {
         final wc = WindowController.fromWindowId(kWindowId!);
         wc.isMaximized().then((maximized) {
           debugPrint("isMaximized $maximized");
-          if (widget.isMaximized.value != maximized) {
+          if (stateGlobal.isMaximized.value != maximized) {
             WidgetsBinding.instance.addPostFrameCallback(
-                (_) => setState(() => widget.isMaximized.value = maximized));
+                (_) => setState(() => stateGlobal.setMaximized(maximized)));
           }
         });
       }
@@ -517,6 +528,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
   void dispose() {
     DesktopMultiWindow.removeListener(this);
     windowManager.removeListener(this);
+    _macOSCheckRestoreTimer?.cancel();
     super.dispose();
   }
 
@@ -535,10 +547,6 @@ class WindowActionPanelState extends State<WindowActionPanel>
 
   @override
   void onWindowMaximize() {
-    // catch maximize from system
-    if (!widget.isMaximized.value) {
-      widget.isMaximized.value = true;
-    }
     stateGlobal.setMinimized(false);
     _setMaximized(true);
     super.onWindowMaximize();
@@ -546,10 +554,6 @@ class WindowActionPanelState extends State<WindowActionPanel>
 
   @override
   void onWindowUnmaximize() {
-    // catch unmaximize from system
-    if (widget.isMaximized.value) {
-      widget.isMaximized.value = false;
-    }
     stateGlobal.setMinimized(false);
     _setMaximized(false);
     super.onWindowUnmaximize();
@@ -577,6 +581,52 @@ class WindowActionPanelState extends State<WindowActionPanel>
 
   @override
   void onWindowClose() async {
+    mainWindowClose() async => await windowManager.hide();
+    notMainWindowClose(WindowController controller) async {
+      if (widget.tabController.length == 0) {
+        debugPrint("close emtpy multiwindow, hide");
+        await controller.hide();
+        await rustDeskWinManager
+            .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!});
+      } else {
+        debugPrint("close not emtpy multiwindow from taskbar");
+        if (Platform.isWindows) {
+          await controller.show();
+          await controller.focus();
+          final res = await widget.onClose?.call() ?? true;
+          if (res) {
+            Future.delayed(Duration.zero, () async {
+              // onWindowClose will be called again to hide
+              await WindowController.fromWindowId(kWindowId!).close();
+            });
+          }
+        } else {
+          // ubuntu22.04 windowOnTop not work from taskbar
+          widget.tabController.clear();
+          Future.delayed(Duration.zero, () async {
+            // onWindowClose will be called again to hide
+            await WindowController.fromWindowId(kWindowId!).close();
+          });
+        }
+      }
+    }
+
+    macOSWindowClose(
+      Future<bool> Function() checkFullscreen,
+      Future<void> Function() closeFunc,
+    ) async {
+      _macOSCheckRestoreCounter = 0;
+      _macOSCheckRestoreTimer =
+          Timer.periodic(Duration(milliseconds: 30), (timer) async {
+        _macOSCheckRestoreCounter++;
+        if (!await checkFullscreen() || _macOSCheckRestoreCounter >= 30) {
+          _macOSCheckRestoreTimer?.cancel();
+          _macOSCheckRestoreTimer = null;
+          Timer(Duration(milliseconds: 700), () async => await closeFunc());
+        }
+      });
+    }
+
     // hide window on close
     if (widget.isMainWindow) {
       if (rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
@@ -584,23 +634,40 @@ class WindowActionPanelState extends State<WindowActionPanel>
       }
       // macOS specific workaround, the window is not hiding when in fullscreen.
       if (Platform.isMacOS && await windowManager.isFullScreen()) {
+        stateGlobal.closeOnFullscreen ??= true;
         await windowManager.setFullScreen(false);
-        await Future.delayed(Duration(seconds: 1));
+        await macOSWindowClose(
+          () async => await windowManager.isFullScreen(),
+          mainWindowClose,
+        );
+      } else {
+        stateGlobal.closeOnFullscreen ??= false;
+        await mainWindowClose();
       }
-      await windowManager.hide();
     } else {
       // it's safe to hide the subwindow
       final controller = WindowController.fromWindowId(kWindowId!);
-      if (Platform.isMacOS && await controller.isFullScreen()) {
-        await controller.setFullscreen(false);
-        await Future.delayed(Duration(seconds: 1));
+      if (Platform.isMacOS) {
+        // onWindowClose() maybe called multiple times because of loopCloseWindow() in remote_tab_page.dart.
+        // use ??=  to make sure the value is set on first call.
+
+        if (await widget.onClose?.call() ?? true) {
+          if (await controller.isFullScreen()) {
+            stateGlobal.closeOnFullscreen ??= true;
+            await controller.setFullscreen(false);
+            stateGlobal.setFullscreen(false, procWnd: false);
+            await macOSWindowClose(
+              () async => await controller.isFullScreen(),
+              () async => await notMainWindowClose(controller),
+            );
+          } else {
+            stateGlobal.closeOnFullscreen ??= false;
+            await notMainWindowClose(controller);
+          }
+        }
+      } else {
+        await notMainWindowClose(controller);
       }
-      await controller.hide();
-      await Future.wait([
-        rustDeskWinManager
-            .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!}),
-        widget.onClose?.call() ?? Future.microtask(() => null)
-      ]);
     }
     super.onWindowClose();
   }
@@ -632,9 +699,10 @@ class WindowActionPanelState extends State<WindowActionPanel>
               Offstage(
                   offstage: !widget.showMaximize || Platform.isMacOS,
                   child: Obx(() => ActionIcon(
-                        message:
-                            widget.isMaximized.value ? 'Restore' : 'Maximize',
-                        icon: widget.isMaximized.value
+                        message: stateGlobal.isMaximized.isTrue
+                            ? 'Restore'
+                            : 'Maximize',
+                        icon: stateGlobal.isMaximized.isTrue
                             ? IconFont.restore
                             : IconFont.max,
                         onTap: _toggleMaximize,
@@ -671,10 +739,8 @@ class WindowActionPanelState extends State<WindowActionPanel>
 
   void _toggleMaximize() {
     toggleMaximize(widget.isMainWindow).then((maximize) {
-      if (widget.isMaximized.value != maximize) {
-        // update state for sub window, wc.unmaximize/maximize() will not invoke onWindowMaximize/Unmaximize
-        widget.isMaximized.value = maximize;
-      }
+      // update state for sub window, wc.unmaximize/maximize() will not invoke onWindowMaximize/Unmaximize
+      stateGlobal.setMaximized(maximize);
     });
   }
 }
@@ -898,14 +964,17 @@ class _TabState extends State<_Tab> with RestorationMixin {
     final labelWidget = Obx(() {
       return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: widget.maxLabelWidth ?? 200),
-          child: Text(
-            translate(widget.label.value),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                color: isSelected
-                    ? MyTheme.tabbar(context).selectedTextColor
-                    : MyTheme.tabbar(context).unSelectedTextColor),
-            overflow: TextOverflow.ellipsis,
+          child: Tooltip(
+            message: translate(widget.label.value),
+            child: Text(
+              translate(widget.label.value),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: isSelected
+                      ? MyTheme.tabbar(context).selectedTextColor
+                      : MyTheme.tabbar(context).unSelectedTextColor),
+              overflow: TextOverflow.ellipsis,
+            ),
           ));
     });
 
